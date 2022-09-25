@@ -127,9 +127,42 @@ def infercnv(
     )
     res = scipy.sparse.vstack(chunks)
 
+    # add the gene mapping, i.e. for a given gene, which column in .obsm['X_cnv'] is closest
+
+    chromosomes = [x for x in var["chromosome"].unique() if x.startswith("chr") and x != "chrM"]
+    import pandas as pd
+    def gene_list_convolve(gene_list, window_size, step, mode):
+        """
+        emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
+        i.e. we group together the genes that get convolved at each position
+        """
+        ggg = {}
+
+        len_threshold = 0 if mode == "same" else window_size # towards the end, the gene list will get shorter due to lack of overlap
+        # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
+
+        for i in range(len(gene_list)):
+            start = i*step
+            stop = start + window_size
+            x = genes[start:stop]
+            if len(x)> len_threshold:
+                ggg[i] = x
+        return pd.Series(ggg)
+
+
+    gene_df = []
+    for chrom in chromosomes:
+        genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
+        convolved_series = gene_list_convolve(genes, window_size=window_size, step=step, mode="same")  # TODO hardcoded mode
+        gene_df.append(pd.DataFrame({"genes":convolved_series, "chromosome":chrom}))
+
+    gene_df = pd.concat(gene_df)
+    gene_df.index.name='pos'
+    gene_df.reset_index()
+
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
-        adata.uns[key_added] = {"chr_pos": chr_pos[0]}
+        adata.uns[key_added] = {"chr_pos": chr_pos[0], "gene_df": gene_df}
 
     else:
         return chr_pos[0], res
