@@ -3,6 +3,7 @@ import re
 from multiprocessing import cpu_count
 from typing import Sequence, Tuple, Union
 
+import pandas as pd
 import numpy as np
 import scipy.ndimage
 import scipy.sparse
@@ -111,7 +112,7 @@ def infercnv(
 
     var = tmp_adata.var.loc[:, ["chromosome", "start", "end"]]  # type: ignore
 
-    chr_pos, chunks = zip(
+    chr_pos, chunks, gene_df = zip(
         *process_map(
             _infercnv_chunk,
             [expr[i : i + chunksize, :] for i in range(0, adata.shape[0], chunksize)],
@@ -126,39 +127,8 @@ def infercnv(
         )
     )
     res = scipy.sparse.vstack(chunks)
-
+    gene_df = gene_df[0]
     # add the gene mapping, i.e. for a given gene, which column in .obsm['X_cnv'] is closest
-
-    chromosomes = [x for x in var["chromosome"].unique() if x.startswith("chr") and x != "chrM"]
-    import pandas as pd
-    def gene_list_convolve(gene_list, window_size, step, mode):
-        """
-        emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
-        i.e. we group together the genes that get convolved at each position
-        """
-        ggg = {}
-
-        len_threshold = 0 if mode == "same" else window_size # towards the end, the gene list will get shorter due to lack of overlap
-        # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
-
-        for i in range(len(gene_list)):
-            start = i*step
-            stop = start + window_size
-            x = genes[start:stop]
-            if len(x)> len_threshold:
-                ggg[i] = x
-        return pd.Series(ggg)
-
-
-    gene_df = []
-    for chrom in chromosomes:
-        genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
-        convolved_series = gene_list_convolve(genes, window_size=window_size, step=step, mode="same")  # TODO hardcoded mode
-        gene_df.append(pd.DataFrame({"genes":convolved_series, "chromosome":chrom}))
-
-    gene_df = pd.concat(gene_df)
-    gene_df.index.name='pos'
-    gene_df.reset_index()
 
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
@@ -213,8 +183,7 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
         smoothed_x = smoothed_x / pyramid.sum()
         return smoothed_x
 
-
-def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.ndarray]:
+def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.ndarray, pd.DataFrame]:
     """Compute the running mean for each chromosome independently. Stack the resulting arrays ordered by chromosome.
 
     Parameters
@@ -246,7 +215,19 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
 
     chr_start_pos = {chr: i for chr, i in zip(chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means]))}
 
-    return chr_start_pos, np.hstack(running_means)
+    " gene dataframe"
+
+    gene_df = []
+    for chrom in chromosomes:
+        genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
+        convolved_series = gene_list_convolve(genes, window_size=window_size, step=step, mode="same")  # TODO hardcoded mode
+        gene_df.append(pd.DataFrame({"genes":convolved_series, "chromosome":chrom}))
+
+    gene_df = pd.concat(gene_df)
+    gene_df.index.name='pos'
+    gene_df.reset_index()
+
+    return chr_start_pos, np.hstack(running_means), gene_df
 
 
 def _get_reference(
@@ -322,7 +303,7 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
     # Step 2 - clip log fold changes
     x_clipped = np.clip(x_centered, -lfc_cap, lfc_cap)
     # Step 3 - smooth by genomic position
-    chr_pos, x_smoothed = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step)
+    chr_pos, x_smoothed, gene_df = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step)
     # Step 4 - center by cell
     x_cell_centered = x_smoothed - np.median(x_smoothed, axis=1)[:, np.newaxis]
 
@@ -335,4 +316,25 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
 
     x_res = scipy.sparse.csr_matrix(x_res)
 
-    return chr_pos, x_res
+    return chr_pos, x_res, gene_df
+
+
+def gene_list_convolve(gene_list, window_size, step, mode):
+    """
+    emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
+    i.e. we group together the genes that get convolved at each position
+    """
+    ggg = {}
+
+    len_threshold = 0 if mode == "same" else window_size # towards the end, the gene list will get shorter due to lack of overlap
+    # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
+
+    for i in range(len(gene_list)):
+        start = i*step
+        stop = start + window_size
+        x = gene_list[start:stop]
+        if len(x)> len_threshold:
+            ggg[i] = x
+    return pd.Series(ggg)
+
+
