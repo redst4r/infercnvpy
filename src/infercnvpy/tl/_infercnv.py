@@ -2,7 +2,6 @@ import itertools
 import re
 from multiprocessing import cpu_count
 from typing import Sequence, Tuple, Union
-
 import pandas as pd
 import numpy as np
 import scipy.ndimage
@@ -11,7 +10,6 @@ from anndata import AnnData
 from scanpy import logging
 from tqdm.auto import tqdm
 from tqdm.contrib.concurrent import process_map
-
 from .._util import _ensure_array
 
 
@@ -128,7 +126,6 @@ def infercnv(
     )
     res = scipy.sparse.vstack(chunks)
     gene_df = gene_df[0]
-    # add the gene mapping, i.e. for a given gene, which column in .obsm['X_cnv'] is closest
 
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
@@ -151,7 +148,6 @@ def _natural_sort(l: Sequence):
         return [convert(c) for c in re.split("([0-9]+)", key)]
 
     return sorted(l, key=alphanum_key)
-
 
 def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10) -> np.ndarray:
     """
@@ -212,11 +208,10 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
         return _running_mean(tmp_x, n=window_size, step=step)
 
     running_means = [_running_mean_for_chromosome(chr) for chr in chromosomes]
-
     chr_start_pos = {chr: i for chr, i in zip(chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means]))}
+    chr_sizes = {chr: running_means[i].shape[1] for i, chr in enumerate(chromosomes)}
 
     " gene dataframe"
-
     gene_df = []
     for chrom in chromosomes:
         genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
@@ -225,7 +220,7 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
 
     gene_df = pd.concat(gene_df)
     gene_df.index.name='pos'
-    gene_df.reset_index()
+    gene_df.reset_index(inplace=True)
 
     return chr_start_pos, np.hstack(running_means), gene_df
 
@@ -318,7 +313,6 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
 
     return chr_pos, x_res, gene_df
 
-
 def gene_list_convolve(gene_list, window_size, step, mode):
     """
     emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
@@ -326,7 +320,7 @@ def gene_list_convolve(gene_list, window_size, step, mode):
     """
     ggg = {}
 
-    len_threshold = 0 if mode == "same" else window_size # towards the end, the gene list will get shorter due to lack of overlap
+    len_threshold = 0 if mode == "same" else window_size - 1  # towards the end, the gene list will get shorter due to lack of overlap
     # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
 
     for i in range(len(gene_list)):
@@ -336,5 +330,4 @@ def gene_list_convolve(gene_list, window_size, step, mode):
         if len(x)> len_threshold:
             ggg[i] = x
     return pd.Series(ggg)
-
 
