@@ -149,7 +149,7 @@ def _natural_sort(l: Sequence):
 
     return sorted(l, key=alphanum_key)
 
-def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10) -> np.ndarray:
+def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10, ) -> np.ndarray:
     """
     Compute a pyramidially weighted running mean.
 
@@ -165,9 +165,8 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
     """
     if n < x.shape[1]:  # regular convolution: the filter is smaller than the #genes
         r = np.arange(1, n + 1)
-
         pyramid = np.minimum(r, r[::-1])
-        smoothed_x = np.apply_along_axis(lambda row: np.convolve(row, pyramid, mode="same"), axis=1, arr=x) / np.sum(
+        smoothed_x = np.apply_along_axis(lambda row: np.convolve(row, pyramid, ), axis=1, arr=x) / np.sum(
             pyramid
         )
         return smoothed_x[:, np.arange(0, smoothed_x.shape[1], step)]
@@ -179,7 +178,7 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
         smoothed_x = smoothed_x / pyramid.sum()
         return smoothed_x
 
-def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.ndarray, pd.DataFrame]:
+def _running_mean_by_chromosome(expr, var, window_size, step, ) -> Tuple[dict, np.ndarray, pd.DataFrame]:
     """Compute the running mean for each chromosome independently. Stack the resulting arrays ordered by chromosome.
 
     Parameters
@@ -205,7 +204,7 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
     def _running_mean_for_chromosome(chr):
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
-        return _running_mean(tmp_x, n=window_size, step=step)
+        return _running_mean(tmp_x, n=window_size, step=step, )
 
     running_means = [_running_mean_for_chromosome(chr) for chr in chromosomes]
     chr_start_pos = {chr: i for chr, i in zip(chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means]))}
@@ -215,7 +214,8 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
     gene_df = []
     for chrom in chromosomes:
         genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
-        convolved_series = gene_list_convolve(genes, window_size=window_size, step=step, mode="same")  # TODO hardcoded mode
+        convolved_series = gene_list_convolve(genes, window_size=window_size-1, step=step, mode="same")
+        assert len(convolved_series) == chr_sizes[chrom]
         gene_df.append(pd.DataFrame({"genes":convolved_series, "chromosome":chrom}))
 
     gene_df = pd.concat(gene_df)
@@ -271,7 +271,7 @@ def _get_reference(
     return reference
 
 
-def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold):
+def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold, ):
     """The actual infercnv work is happening here.
 
     Process chunks of serveral thousand genes independently since this
@@ -298,7 +298,7 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
     # Step 2 - clip log fold changes
     x_clipped = np.clip(x_centered, -lfc_cap, lfc_cap)
     # Step 3 - smooth by genomic position
-    chr_pos, x_smoothed, gene_df = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step)
+    chr_pos, x_smoothed, gene_df = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step, )
     # Step 4 - center by cell
     x_cell_centered = x_smoothed - np.median(x_smoothed, axis=1)[:, np.newaxis]
 
