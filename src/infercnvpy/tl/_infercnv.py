@@ -110,7 +110,7 @@ def infercnv(
 
     var = tmp_adata.var.loc[:, ["chromosome", "start", "end"]]  # type: ignore
 
-    chr_pos, chunks, gene_df = zip(
+    chr_pos, chunks, convolved_dfs = zip(
         *process_map(
             _infercnv_chunk,
             [expr[i : i + chunksize, :] for i in range(0, adata.shape[0], chunksize)],
@@ -125,11 +125,11 @@ def infercnv(
         )
     )
     res = scipy.sparse.vstack(chunks)
-    gene_df = gene_df[0]
+    convolved_dfs = convolved_dfs[0] # since each chunk returns the same df
 
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
-        adata.uns[key_added] = {"chr_pos": chr_pos[0], "gene_df": gene_df}
+        adata.uns[key_added] = {"chr_pos": chr_pos[0], "df": convolved_dfs}
 
     else:
         return chr_pos[0], res
@@ -204,25 +204,24 @@ def _running_mean_by_chromosome(expr, var, window_size, step, ) -> Tuple[dict, n
     def _running_mean_for_chromosome(chr):
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
-        return _running_mean(tmp_x, n=window_size, step=step, )
+        x_conv = _running_mean(tmp_x, n=window_size, step=step, )
+        convolved_gene_names = _gene_list_convolve(genes, window_size=window_size-1, step=step, mode="same")
+        assert len(convolved_gene_names) == x_conv.shape[1], f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
+        # DataFrame containing all the genes that go into a specific position
+        convolved_df = pd.DataFrame({"genes":convolved_gene_names, "chromosome": chr})
+
+        return x_conv, convolved_df
 
     running_means = [_running_mean_for_chromosome(chr) for chr in chromosomes]
+    running_means, convolved_dfs = zip(*running_means)
+
+    convolved_dfs = pd.concat(convolved_dfs)  # since its a list of dfs before
+    convolved_dfs.index.name = "relative_position"
+    convolved_dfs.reset_index(inplace=True)
+
+    # chr_sizes = {chr: running_means[i].shape[1] for i, chr in enumerate(chromosomes)}
     chr_start_pos = {chr: i for chr, i in zip(chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means]))}
-    chr_sizes = {chr: running_means[i].shape[1] for i, chr in enumerate(chromosomes)}
-
-    " gene dataframe"
-    gene_df = []
-    for chrom in chromosomes:
-        genes = var.loc[var["chromosome"] == chrom].sort_values("start").index.values
-        convolved_series = gene_list_convolve(genes, window_size=window_size-1, step=step, mode="same")
-        assert len(convolved_series) == chr_sizes[chrom]
-        gene_df.append(pd.DataFrame({"genes":convolved_series, "chromosome":chrom}))
-
-    gene_df = pd.concat(gene_df)
-    gene_df.index.name='pos'
-    gene_df.reset_index(inplace=True)
-
-    return chr_start_pos, np.hstack(running_means), gene_df
+    return chr_start_pos, np.hstack(running_means), convolved_dfs
 
 
 def _get_reference(
@@ -298,7 +297,7 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
     # Step 2 - clip log fold changes
     x_clipped = np.clip(x_centered, -lfc_cap, lfc_cap)
     # Step 3 - smooth by genomic position
-    chr_pos, x_smoothed, gene_df = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step, )
+    chr_pos, x_smoothed, convoled_df = _running_mean_by_chromosome( x_clipped, var, window_size=window_size, step=step)
     # Step 4 - center by cell
     x_cell_centered = x_smoothed - np.median(x_smoothed, axis=1)[:, np.newaxis]
 
@@ -311,9 +310,9 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
 
     x_res = scipy.sparse.csr_matrix(x_res)
 
-    return chr_pos, x_res, gene_df
+    return chr_pos, x_res, convoled_df
 
-def gene_list_convolve(gene_list, window_size, step, mode):
+def _gene_list_convolve(gene_list, window_size, step, mode):
     """
     emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
     i.e. we group together the genes that get convolved at each position
