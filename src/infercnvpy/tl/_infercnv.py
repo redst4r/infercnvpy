@@ -127,6 +127,12 @@ def infercnv(
     res = scipy.sparse.vstack(chunks)
     convolved_dfs = convolved_dfs[0] # since each chunk returns the same df
 
+    # annotate the genomic range
+    start_dict = var['start'].to_dict()
+    stop_dict = var['stop'].to_dict()
+    convolved_dfs['start'] = convolved_dfs['genes'].apply(lambda x: start_dict[x[0]])  # start of the first gene
+    convolved_dfs['stop'] = convolved_dfs['genes'].apply(lambda x: stop_dict[x[-1]])  # stop of the last gene
+
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
         adata.uns[key_added] = {"chr_pos": chr_pos[0], "df": convolved_dfs}
