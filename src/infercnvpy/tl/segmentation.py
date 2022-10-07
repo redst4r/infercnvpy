@@ -110,7 +110,7 @@ class PWC_Segmentor():
         assert len(mean_values) == len(self.signal)
         return mean_values
 
-from .priority_queue import Priority
+from .priority_queue import PriorityHeap
 class PWC_Segmentor_Heap():
 
     def __init__(self, signal: np.ndarray, verbose=False):
@@ -181,7 +181,7 @@ class PWC_Segmentor_Heap():
         # TODO this is really UGLY, with the order of deleting the array etc!!!
         if right_ID == self.interval_id[-1]:
             # no need to delete the right itnerval from the heap
-            # remove the left, as it will never be merged
+            # remove the left (the new rightmost interval), as it will never be merged
             heap_ix = self.heap.search_element(left_ID)
             self.heap.Remove(heap_ix)
             
@@ -265,7 +265,10 @@ class PWC_Segmentor_Heap():
         lambda_schedule = [] 
         current_lambda = 0
         for i in range(iterations):
-            
+
+            # if there's only one interval left, we're done
+            if len(self.interval_id) == 1:
+                break
             # find the breakpoint with the smallest lambda
             priority, the_ID = self.heap.getMax()
             Lmin = (-1) * priority  ## again, maxHeap! high priorty -> low cost

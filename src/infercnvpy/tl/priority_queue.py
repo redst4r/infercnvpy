@@ -28,7 +28,7 @@ def rightChild(i) :
 class PriorityHeap():
     def __init__(self, max_size, verbose=False):
         self.H = [Element(0, None) for _ in range(max_size)]  #[(0, None) for _ in range(max_size)]
-        self.size= -1
+        self.size= -1  #TODO weird, why -1
         self.max_size = max_size  #TODO redundant wuth len(H)
         self.verbose=verbose
         
@@ -77,7 +77,7 @@ class PriorityHeap():
     def insert(self, priority, datum) :
         if self.verbose:
             pass #print(f"HEAP\tInserting {datum} -- {priority}")
-        if self.size + 1 >= self.max_size:
+        if self.size + 1 >= self.max_size:  # TODO an empty Heap has size -1!!
             raise ValueError(f"heap is at max capacity {self.max_size}")
         self.size +=1 
         self.H[self.size] = Element(priority, datum)
@@ -90,22 +90,27 @@ class PriorityHeap():
     # the element with
     # maximum priority
     def extractMax(self) :
-        if self.size <1 :
+        if self.size <0 :  # empty heap has size -1
             raise ValueError("Heap empty")
         result = self.H[0]
 
-        # Replace the value 
-        # at the root with 
-        # the last leaf
-        self.H[0] = self.H[self.size]
-        self.H[self.size] = Element(0, None) ## fill the old element
-        self.size -=  1
+        if self.size == 0:  # there's only one element in the tree (the max we're about to extract
+            self.H[0] = Element(0, None) 
+            self.size = -1
+            return result  # careful here, result == H[0], but we changed H[0] to empty above. It works (result point to the actual object, not the pointer in the list)
+        else:
+            # Replace the value 
+            # at the root with 
+            # the last leaf
+            self.H[0] = self.H[self.size]
+            self.H[self.size] = Element(0, None) ## fill the old element
+            self.size -=  1
 
-        # Shift down the replaced 
-        # element to maintain the 
-        # heap property
-        self.shiftDown(0)
-        return result
+            # Shift down the replaced 
+            # element to maintain the 
+            # heap property
+            self.shiftDown(0)
+            return result
 
     # Function to change the priority
     # of an element
@@ -148,7 +153,6 @@ class PriorityHeap():
     
         if self.verbose:
             print(f"HEAP\tRemoving {self.H[i].datum}")
-#         print(f"removing {self.H[i]}")
         
         # Shift the node to the root
         # of the heap

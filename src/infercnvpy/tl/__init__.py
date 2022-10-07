@@ -8,7 +8,7 @@ from scanpy import logging
 from ._copykat import copykat
 from ._infercnv import infercnv
 from ._scores import cnv_score, ithcna, ithgex
-
+from .segmentation import PWC_Segmentor_Heap
 
 def leiden(
     adata: AnnData,
