@@ -30,6 +30,7 @@ def infercnv(
     inplace: bool = True,
     layer: Union[str, None] = None,
     key_added: str = "cnv",
+    conv_mode: str = "same"
 ) -> Union[None, Tuple[dict, scipy.sparse.csr_matrix]]:
     """
     Infer Copy Number Variation (CNV) by averaging gene expression over genomic regions.
@@ -80,6 +81,9 @@ def infercnv(
         Key under which the cnv matrix will be stored in adata if `inplace=True`.
         Will store the matrix in `adata.obsm["X_{key_added}"] and additional information
         in `adata.uns[key_added]`.
+    conv_mode
+        Mode of covolution applied to the genes: Either "same" (slides the filter past
+        the chromosome) or "valid" (stopping onmce the filter hits the chromosome end)
 
     Returns
     -------
@@ -121,6 +125,7 @@ def infercnv(
             itertools.repeat(window_size),
             itertools.repeat(step),
             itertools.repeat(dynamic_threshold),
+            itertools.repeat(conv_mode),
             tqdm_class=tqdm,
             max_workers=cpu_count() if n_jobs is None else n_jobs,
         )
@@ -150,7 +155,7 @@ def _natural_sort(l: Sequence):
     return sorted(l, key=alphanum_key)
 
 
-def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10) -> np.ndarray:
+def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10, conv_mode="same") -> np.ndarray:
     """
     Compute a pyramidially weighted running mean.
 
@@ -168,7 +173,7 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
         r = np.arange(1, n + 1)
 
         pyramid = np.minimum(r, r[::-1])
-        smoothed_x = np.apply_along_axis(lambda row: np.convolve(row, pyramid, mode="same"), axis=1, arr=x) / np.sum(
+        smoothed_x = np.apply_along_axis(lambda row: np.convolve(row, pyramid, mode=conv_mode), axis=1, arr=x) / np.sum(
             pyramid
         )
         return smoothed_x[:, np.arange(0, smoothed_x.shape[1], step)]
@@ -181,7 +186,7 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
         return smoothed_x
 
 
-def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.ndarray]:
+def _running_mean_by_chromosome(expr, var, window_size, step, conv_mode) -> Tuple[dict, np.ndarray]:
     """Compute the running mean for each chromosome independently. Stack the resulting arrays ordered by chromosome.
 
     Parameters
@@ -207,7 +212,7 @@ def _running_mean_by_chromosome(expr, var, window_size, step) -> Tuple[dict, np.
     def _running_mean_for_chromosome(chr):
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
-        return _running_mean(tmp_x, n=window_size, step=step)
+        return _running_mean(tmp_x, n=window_size, step=step, conv_mode=conv_mode)
 
     running_means = [_running_mean_for_chromosome(chr) for chr in chromosomes]
 
@@ -262,7 +267,7 @@ def _get_reference(
     return reference
 
 
-def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold):
+def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold, conv_mode):
     """The actual infercnv work is happening here.
 
     Process chunks of serveral thousand genes independently since this
@@ -289,7 +294,7 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
     # Step 2 - clip log fold changes
     x_clipped = np.clip(x_centered, -lfc_cap, lfc_cap)
     # Step 3 - smooth by genomic position
-    chr_pos, x_smoothed = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step)
+    chr_pos, x_smoothed = _running_mean_by_chromosome(x_clipped, var, window_size=window_size, step=step, conv_mode=conv_mode)
     # Step 4 - center by cell
     x_cell_centered = x_smoothed - np.median(x_smoothed, axis=1)[:, np.newaxis]
 
