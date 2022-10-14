@@ -29,7 +29,10 @@ dependencies = [
     'gtfparse>=1.2.1',
     'pycairo>=1.20; sys_platform == "win32"',
     'leidenalg',
-    'pyreadr'
+    'pyreadr',
+    'scipy>=1.7.0', # for leaves_list()
+    'scikit-learn>=1.0.0', # pairwise_distances()
+    'fastcluster'
 ]
 
 [project.optional-dependencies]
