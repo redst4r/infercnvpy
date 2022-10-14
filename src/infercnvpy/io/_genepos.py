@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Literal, Union
-
+from typing import Union
 import gtfparse
 import numpy as np
 import pandas as pd
@@ -12,7 +11,7 @@ def genomic_position_from_gtf(
     gtf_file: Union[Path, str],
     adata: Union[AnnData, None] = None,
     *,
-    gtf_gene_id: Literal["gene_id", "gene_name"] = "gene_name",
+    gtf_gene_id = "gene_name",
     adata_gene_id: Union[str, None] = None,
     inplace: bool = True,
 ) -> Union[pd.DataFrame, None]:
