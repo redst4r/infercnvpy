@@ -19,6 +19,7 @@ def chromosome_heatmap(
     figsize: Tuple[int, int] = (16, 10),
     show: Optional[bool] = None,
     save: Union[str, bool, None] = None,
+    do_subclustering: bool = False,
     **kwargs,
 ) -> Optional[Dict[str, matplotlib.axes.Axes]]:
     """
@@ -72,6 +73,11 @@ def chromosome_heatmap(
     # add chromosome annotations
     var_group_positions = list(zip(chr_pos, chr_pos[1:] + [tmp_adata.shape[1]]))
 
+
+    if do_subclustering:
+        tmp_adata = _do_subcluster_reorder(tmp_adata, groupby)
+
+
     return_ax_dic = sc.pl.heatmap(
         tmp_adata,
         var_names=tmp_adata.var.index.values,
@@ -92,6 +98,47 @@ def chromosome_heatmap(
     show = sc.settings.autoshow if show is None else show
     if not show:
         return return_ax_dic
+
+from sklearn.metrics import pairwise_distances
+import fastcluster
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import leaves_list
+import gc
+def sklearn_linkage(X, n_cores, method):
+    """
+    use sklearn to calculate the linkage/clustering of the data
+    - sklearns metric is ALOT faster to compute a distance matrix
+    - feed that distance matrix into fastcluster.linkage()
+    """
+    assert isinstance(X, np.ndarray)
+
+    D = pairwise_distances(X, n_jobs=n_cores)
+    D = (D + D.T) / 2  # symmetrize (it's symmetric, but machine precision is an issue here)
+    P = squareform(D)
+
+    # get rid of the giant matrix D
+    del D
+    gc.collect()
+
+    linkage = fastcluster.linkage(P, method=method)
+    return linkage
+
+def _do_subcluster_reorder(adata, groupby):
+    """
+    just sort the cells in the adata, such taht sc.pl.heatmap (which does respect the groupby)
+    does display the cells in such an order that the subclones become apparent
+    """
+    reordered_cell_ix = []
+    for clone_id in adata.obs[groupby].unique():
+        tmp = adata[adata.obs[groupby] == clone_id]
+
+        linkage = sklearn_linkage(tmp, n_cores=1, method='ward')
+        leave_ix = leaves_list(linkage)
+        reordered_cell_ix.extend(
+            tmp.obs.index[leave_ix].tolist()
+        )
+
+    return adata[reordered_cell_ix]
 
 
 def chromosome_heatmap_summary(
