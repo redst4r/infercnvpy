@@ -8,7 +8,11 @@ from anndata import AnnData
 from matplotlib.colors import Colormap, TwoSlopeNorm
 from scanpy.plotting._utils import savefig_or_show
 from scipy.sparse import issparse
-
+from sklearn.metrics import pairwise_distances
+import fastcluster
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import leaves_list
+import gc
 
 def chromosome_heatmap(
     adata: AnnData,
@@ -75,6 +79,7 @@ def chromosome_heatmap(
 
 
     if do_subclustering:
+        tmp_adata.obsm['X_cnv_pca'] = adata.obsm[f"X_{use_rep}_pca"]  # needed to do the clustering on CNV PCs
         tmp_adata = _do_subcluster_reorder(tmp_adata, groupby, 'ward')
 
 
@@ -99,11 +104,7 @@ def chromosome_heatmap(
     if not show:
         return return_ax_dic
 
-from sklearn.metrics import pairwise_distances
-import fastcluster
-from scipy.spatial.distance import squareform
-from scipy.cluster.hierarchy import leaves_list
-import gc
+
 def sklearn_linkage(X, n_cores, method):
     """
     use sklearn to calculate the linkage/clustering of the data
