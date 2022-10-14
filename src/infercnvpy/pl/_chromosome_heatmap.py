@@ -75,7 +75,7 @@ def chromosome_heatmap(
 
 
     if do_subclustering:
-        tmp_adata = _do_subcluster_reorder(tmp_adata, groupby)
+        tmp_adata = _do_subcluster_reorder(tmp_adata, groupby, 'ward')
 
 
     return_ax_dic = sc.pl.heatmap(
@@ -123,7 +123,7 @@ def sklearn_linkage(X, n_cores, method):
     linkage = fastcluster.linkage(P, method=method)
     return linkage
 
-def _do_subcluster_reorder(adata, groupby):
+def _do_subcluster_reorder(adata, groupby, method):
     """
     just sort the cells in the adata, such taht sc.pl.heatmap (which does respect the groupby)
     does display the cells in such an order that the subclones become apparent
@@ -131,13 +131,19 @@ def _do_subcluster_reorder(adata, groupby):
     reordered_cell_ix = []
     for clone_id in adata.obs[groupby].unique():
         tmp = adata[adata.obs[groupby] == clone_id]
-
-        linkage = sklearn_linkage(tmp, n_cores=1, method='ward')
-        leave_ix = leaves_list(linkage)
-        reordered_cell_ix.extend(
-            tmp.obs.index[leave_ix].tolist()
-        )
-
+#         X = tmp.X.A
+        X = tmp.obsm['X_cnv_pca']
+        if X.shape[0]>1:
+            print(clone_id, X.shape)
+            linkage = sklearn_linkage(X, n_cores=1, method=method)
+            leave_ix = leaves_list(linkage)
+            reordered_cell_ix.extend(
+                tmp.obs.index[leave_ix].tolist()
+            )
+        else:
+            reordered_cell_ix.extend(
+                tmp.obs.index.tolist()
+            )
     return adata[reordered_cell_ix]
 
 
