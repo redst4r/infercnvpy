@@ -135,7 +135,7 @@ def infercnv(
 
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
-        adata.uns[key_added] = {"chr_pos": chr_pos[0], "df": convolved_dfs}
+        adata.uns[key_added] = {"chr_pos": chr_pos[0], "var": convolved_dfs}
 
     else:
         return chr_pos[0], res
@@ -211,6 +211,7 @@ def _running_mean_by_chromosome(expr, var, window_size, step, ) -> Tuple[dict, n
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
         x_conv = _running_mean(tmp_x, n=window_size, step=step, )
+        # TODO window_size-1 still needed??
         convolved_gene_names = _gene_list_convolve(genes, window_size=window_size-1, step=step, mode="same")
         assert len(convolved_gene_names) == x_conv.shape[1], f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
         # DataFrame containing all the genes that go into a specific position
@@ -325,6 +326,7 @@ def _gene_list_convolve(gene_list, window_size, step, mode):
     """
     ggg = {}
 
+    #TODO window_size-1 still needed?
     len_threshold = 0 if mode == "same" else window_size - 1  # towards the end, the gene list will get shorter due to lack of overlap
     # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
 
