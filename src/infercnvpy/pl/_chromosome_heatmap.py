@@ -79,6 +79,7 @@ def chromosome_heatmap(
 
 
     if do_subclustering:
+        tmp_adata.obsm['X_cnv_pca'] = adata.obsm[f"X_{use_rep}_pca"]  # needed to do the clustering on CNV PCs
         tmp_adata = _do_subcluster_reorder(tmp_adata, groupby, 'ward')
 
 
@@ -133,13 +134,25 @@ def _do_subcluster_reorder(adata, groupby, method):
         tmp = adata[adata.obs[groupby] == clone_id]
 #         X = tmp.X.A
         X = tmp.obsm['X_cnv_pca']
+        
         if X.shape[0]>1:
-            print(clone_id, X.shape)
-            linkage = sklearn_linkage(X, n_cores=1, method=method)
-            leave_ix = leaves_list(linkage)
-            reordered_cell_ix.extend(
-                tmp.obs.index[leave_ix].tolist()
-            )
+            
+            if method == "leiden":
+                _adata_tmp = sc.AnnData(X, obs=tmp.obs)
+                _adata_tmp.obsm['X_pca'] = X
+                sc.pp.neighbors(_adata_tmp)
+                sc.tl.leiden(_adata_tmp)
+                indices = [_adata_tmp.obs.obs.query('leiden==@l').inde for l in _adata_tmp.obs.leiden.unique()]
+                indices = np.concatenate(indices)
+                reordered_cell_ix.extend(
+                    indices.tolist()
+                )                
+            else:
+                linkage = sklearn_linkage(X, n_cores=1, method=method)
+                leave_ix = leaves_list(linkage)
+                reordered_cell_ix.extend(
+                    tmp.obs.index[leave_ix].tolist()
+                )
         else:
             reordered_cell_ix.extend(
                 tmp.obs.index.tolist()

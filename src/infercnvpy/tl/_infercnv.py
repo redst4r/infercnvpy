@@ -217,7 +217,6 @@ def _running_mean_by_chromosome(expr, var, window_size, step, conv_mode) -> Tupl
     def _running_mean_for_chromosome(chr):
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
-<<<<<<< HEAD
         x_conv = _running_mean(tmp_x, n=window_size, step=step, conv_mode=conv_mode)
         convolved_gene_names = _gene_list_convolve(genes, window_size=window_size, step=step, mode=conv_mode)
         assert len(convolved_gene_names) == x_conv.shape[1], f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
