@@ -1,4 +1,5 @@
 """Scores to summarize and assess copy number variation"""
+
 import warnings
 from typing import Any, Mapping, Optional
 
@@ -58,9 +59,13 @@ def cnv_score(
         groupby = obs_key
 
     if groupby not in adata.obs.columns and groupby == "cnv_leiden":
-        raise ValueError("`cnv_leiden` not found in `adata.obs`. Did you run `tl.leiden`?")
+        raise ValueError(
+            "`cnv_leiden` not found in `adata.obs`. Did you run `tl.leiden`?"
+        )
     cluster_score = {
-        cluster: np.mean(np.abs(adata.obsm[f"X_{use_rep}"][adata.obs[groupby] == cluster, :]))
+        cluster: np.mean(
+            np.abs(adata[adata.obs[groupby] == cluster, :].obsm[f"X_{use_rep}"])
+        )
         for cluster in adata.obs[groupby].unique()
     }
 

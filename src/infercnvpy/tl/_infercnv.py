@@ -29,7 +29,7 @@ def infercnv(
     inplace: bool = True,
     layer: Union[str, None] = None,
     key_added: str = "cnv",
-    conv_mode: str = "same"
+    conv_mode: str = "same",
 ) -> Union[None, Tuple[dict, scipy.sparse.csr_matrix]]:
     """
     Infer Copy Number Variation (CNV) by averaging gene expression over genomic regions.
@@ -93,7 +93,8 @@ def infercnv(
         raise ValueError("Ensure your var_names are unique!")
     if {"chromosome", "start", "end"} - set(adata.var.columns) != set():
         raise ValueError(
-            "Genomic positions not found. There need to be `chromosome`, `start`, and " "`end` columns in `adata.var`. "
+            "Genomic positions not found. There need to be `chromosome`, `start`, and "
+            "`end` columns in `adata.var`. "
         )
 
     var_mask = adata.var["chromosome"].isnull()
@@ -130,13 +131,17 @@ def infercnv(
         )
     )
     res = scipy.sparse.vstack(chunks)
-    convolved_dfs = convolved_dfs[0] # since each chunk returns the same df
+    convolved_dfs = convolved_dfs[0]  # since each chunk returns the same df
 
     # annotate the genomic range
-    start_dict = var['start'].to_dict()
-    stop_dict = var['end'].to_dict()
-    convolved_dfs['start'] = convolved_dfs['genes'].apply(lambda x: start_dict[x[0]])  # start of the first gene
-    convolved_dfs['end'] = convolved_dfs['genes'].apply(lambda x: stop_dict[x[-1]])  # stop of the last gene
+    start_dict = var["start"].to_dict()
+    stop_dict = var["end"].to_dict()
+    convolved_dfs["start"] = convolved_dfs["genes"].apply(
+        lambda x: start_dict[x[0]]
+    )  # start of the first gene
+    convolved_dfs["end"] = convolved_dfs["genes"].apply(
+        lambda x: stop_dict[x[-1]]
+    )  # stop of the last gene
 
     if inplace:
         adata.obsm[f"X_{key_added}"] = res
@@ -161,7 +166,12 @@ def _natural_sort(l: Sequence):
     return sorted(l, key=alphanum_key)
 
 
-def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step: int = 10, conv_mode="same") -> np.ndarray:
+def _running_mean(
+    x: Union[np.ndarray, scipy.sparse.spmatrix],
+    n: int = 50,
+    step: int = 10,
+    conv_mode="same",
+) -> np.ndarray:
     """
     Compute a pyramidially weighted running mean.
 
@@ -178,9 +188,9 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
     if n < x.shape[1]:  # regular convolution: the filter is smaller than the #genes
         r = np.arange(1, n + 1)
         pyramid = np.minimum(r, r[::-1])
-        smoothed_x = np.apply_along_axis(lambda row: np.convolve(row, pyramid, mode=conv_mode), axis=1, arr=x) / np.sum(
-            pyramid
-        )
+        smoothed_x = np.apply_along_axis(
+            lambda row: np.convolve(row, pyramid, mode=conv_mode), axis=1, arr=x
+        ) / np.sum(pyramid)
         return smoothed_x[:, np.arange(0, smoothed_x.shape[1], step)]
 
     else:  # there's less genes than the filtersize. just apply a single conv with a smaller filter (no sliding)
@@ -191,7 +201,9 @@ def _running_mean(x: Union[np.ndarray, scipy.sparse.spmatrix], n: int = 50, step
         return smoothed_x
 
 
-def _running_mean_by_chromosome(expr, var, window_size, step, conv_mode) -> Tuple[dict, np.ndarray,pd.DataFrame]:
+def _running_mean_by_chromosome(
+    expr, var, window_size, step, conv_mode
+) -> Tuple[dict, np.ndarray, pd.DataFrame]:
     """Compute the running mean for each chromosome independently. Stack the resulting arrays ordered by chromosome.
 
     Parameters
@@ -212,16 +224,22 @@ def _running_mean_by_chromosome(expr, var, window_size, step, conv_mode) -> Tupl
         A numpy array with the smoothed gene expression, ordered by chromosome
         and genomic position
     """
-    chromosomes = _natural_sort([x for x in var["chromosome"].unique() if x.startswith("chr") and x != "chrM"])
+    chromosomes = _natural_sort(
+        [x for x in var["chromosome"].unique() if x.startswith("chr") and x != "chrM"]
+    )
 
     def _running_mean_for_chromosome(chr):
         genes = var.loc[var["chromosome"] == chr].sort_values("start").index.values
         tmp_x = expr[:, var.index.get_indexer(genes)]
         x_conv = _running_mean(tmp_x, n=window_size, step=step, conv_mode=conv_mode)
-        convolved_gene_names = _gene_list_convolve(genes, window_size=window_size, step=step, mode=conv_mode)
-        assert len(convolved_gene_names) == x_conv.shape[1], f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
+        convolved_gene_names = _gene_list_convolve(
+            genes, window_size=window_size, step=step, mode=conv_mode
+        )
+        assert len(convolved_gene_names) == x_conv.shape[1], (
+            f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
+        )
         # DataFrame containing all the genes that go into a specific position
-        convolved_df = pd.DataFrame({"genes":convolved_gene_names, "chromosome": chr})
+        convolved_df = pd.DataFrame({"genes": convolved_gene_names, "chromosome": chr})
 
         return x_conv, convolved_df
 
@@ -233,7 +251,12 @@ def _running_mean_by_chromosome(expr, var, window_size, step, conv_mode) -> Tupl
     convolved_dfs.reset_index(inplace=True)
 
     # chr_sizes = {chr: running_means[i].shape[1] for i, chr in enumerate(chromosomes)}
-    chr_start_pos = {chr: i for chr, i in zip(chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means]))}
+    chr_start_pos = {
+        chr: i
+        for chr, i in zip(
+            chromosomes, np.cumsum([0] + [x.shape[1] for x in running_means])
+        )
+    }
     return chr_start_pos, np.hstack(running_means), convolved_dfs
 
 
@@ -272,7 +295,11 @@ def _get_reference(
                     f"{reference_cat[~reference_cat_in_obs]}"
                 )
 
-            reference = np.vstack([np.mean(adata.X[obs_col == cat, :], axis=0) for cat in reference_cat])
+            # reference = np.vstack([np.mean(adata.X[obs_col == cat, :], axis=0) for cat in reference_cat])
+            ## bugfix: index adata, then select X
+            reference = np.vstack(
+                [np.mean(adata[obs_col == cat, :].X, axis=0) for cat in reference_cat]
+            )
 
     if reference.ndim == 1:
         reference = reference[np.newaxis, :]
@@ -283,7 +310,9 @@ def _get_reference(
     return reference
 
 
-def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold, conv_mode):
+def _infercnv_chunk(
+    tmp_x, var, reference, lfc_cap, window_size, step, dynamic_threshold, conv_mode
+):
     """The actual infercnv work is happening here.
 
     Process chunks of serveral thousand genes independently since this
@@ -310,7 +339,9 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
     # Step 2 - clip log fold changes
     x_clipped = np.clip(x_centered, -lfc_cap, lfc_cap)
     # Step 3 - smooth by genomic position
-    chr_pos, x_smoothed, convoled_df = _running_mean_by_chromosome( x_clipped, var, window_size=window_size, step=step, conv_mode=conv_mode)
+    chr_pos, x_smoothed, convoled_df = _running_mean_by_chromosome(
+        x_clipped, var, window_size=window_size, step=step, conv_mode=conv_mode
+    )
     # Step 4 - center by cell
     x_cell_centered = x_smoothed - np.median(x_smoothed, axis=1)[:, np.newaxis]
 
@@ -325,6 +356,7 @@ def _infercnv_chunk(tmp_x, var, reference, lfc_cap, window_size, step, dynamic_t
 
     return chr_pos, x_res, convoled_df
 
+
 def _gene_list_convolve(gene_list, window_size, step, mode):
     """
     emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
@@ -332,15 +364,16 @@ def _gene_list_convolve(gene_list, window_size, step, mode):
     """
     ggg = {}
 
-    #TODO window_size-1 still needed?
-    len_threshold = 0 if mode == "same" else window_size - 1  # towards the end, the gene list will get shorter due to lack of overlap
+    # TODO window_size-1 still needed?
+    len_threshold = (
+        0 if mode == "same" else window_size - 1
+    )  # towards the end, the gene list will get shorter due to lack of overlap
     # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
 
     for i in range(len(gene_list)):
-        start = i*step
+        start = i * step
         stop = start + window_size
         x = gene_list[start:stop]
-        if len(x)> len_threshold:
+        if len(x) > len_threshold:
             ggg[i] = x
     return pd.Series(ggg)
-
