@@ -14,6 +14,7 @@ from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import leaves_list
 import gc
 
+
 def chromosome_heatmap(
     adata: AnnData,
     *,
@@ -59,7 +60,9 @@ def chromosome_heatmap(
 
     """
     if groupby == "cnv_leiden" and "cnv_leiden" not in adata.obs.columns:
-        raise ValueError("'cnv_leiden' is not in `adata.obs`. Did you run `tl.leiden()`?")
+        raise ValueError(
+            "'cnv_leiden' is not in `adata.obs`. Did you run `tl.leiden()`?"
+        )
     tmp_adata = AnnData(X=adata.obsm[f"X_{use_rep}"], obs=adata.obs)
 
     # transfer colors from adata if present
@@ -67,7 +70,9 @@ def chromosome_heatmap(
         tmp_adata.uns[f"{groupby}_colors"] = adata.uns[f"{groupby}_colors"]
 
     # re-sort, as saving & loading anndata destroys the order
-    chr_pos_dict = dict(sorted(adata.uns[use_rep]["chr_pos"].items(), key=lambda x: x[1]))
+    chr_pos_dict = dict(
+        sorted(adata.uns[use_rep]["chr_pos"].items(), key=lambda x: x[1])
+    )
     chr_pos = list(chr_pos_dict.values())
 
     # center color map at 0
@@ -77,11 +82,11 @@ def chromosome_heatmap(
     # add chromosome annotations
     var_group_positions = list(zip(chr_pos, chr_pos[1:] + [tmp_adata.shape[1]]))
 
-
     if do_subclustering:
-        tmp_adata.obsm['X_cnv_pca'] = adata.obsm[f"X_{use_rep}_pca"]  # needed to do the clustering on CNV PCs
-        tmp_adata = _do_subcluster_reorder(tmp_adata, groupby, 'ward')
-
+        tmp_adata.obsm["X_cnv_pca"] = adata.obsm[
+            f"X_{use_rep}_pca"
+        ]  # needed to do the clustering on CNV PCs
+        tmp_adata = _do_subcluster_reorder(tmp_adata, groupby, "ward")
 
     return_ax_dic = sc.pl.heatmap(
         tmp_adata,
@@ -97,7 +102,9 @@ def chromosome_heatmap(
         **kwargs,
     )
 
-    return_ax_dic["heatmap_ax"].vlines(chr_pos[1:], lw=0.6, ymin=0, ymax=tmp_adata.shape[0])
+    return_ax_dic["heatmap_ax"].vlines(
+        chr_pos[1:], lw=0.6, ymin=0, ymax=tmp_adata.shape[0]
+    )
 
     savefig_or_show("heatmap", show=show, save=save)
     show = sc.settings.autoshow if show is None else show
@@ -114,7 +121,9 @@ def sklearn_linkage(X, n_cores, method):
     assert isinstance(X, np.ndarray)
 
     D = pairwise_distances(X, n_jobs=n_cores)
-    D = (D + D.T) / 2  # symmetrize (it's symmetric, but machine precision is an issue here)
+    D = (
+        D + D.T
+    ) / 2  # symmetrize (it's symmetric, but machine precision is an issue here)
     P = squareform(D)
 
     # get rid of the giant matrix D
@@ -124,6 +133,7 @@ def sklearn_linkage(X, n_cores, method):
     linkage = fastcluster.linkage(P, method=method)
     return linkage
 
+
 def _do_subcluster_reorder(adata, groupby, method):
     """
     just sort the cells in the adata, such taht sc.pl.heatmap (which does respect the groupby)
@@ -132,31 +142,27 @@ def _do_subcluster_reorder(adata, groupby, method):
     reordered_cell_ix = []
     for clone_id in adata.obs[groupby].unique():
         tmp = adata[adata.obs[groupby] == clone_id]
-#         X = tmp.X.A
-        X = tmp.obsm['X_cnv_pca']
-        
-        if X.shape[0]>1:
-            
+        #         X = tmp.X.A
+        X = tmp.obsm["X_cnv_pca"]
+
+        if X.shape[0] > 1:
             if method == "leiden":
                 _adata_tmp = sc.AnnData(X, obs=tmp.obs)
-                _adata_tmp.obsm['X_pca'] = X
+                _adata_tmp.obsm["X_pca"] = X
                 sc.pp.neighbors(_adata_tmp)
                 sc.tl.leiden(_adata_tmp)
-                indices = [_adata_tmp.obs.obs.query('leiden==@l').inde for l in _adata_tmp.obs.leiden.unique()]
+                indices = [
+                    _adata_tmp.obs.obs.query("leiden==@l").inde
+                    for l in _adata_tmp.obs.leiden.unique()
+                ]
                 indices = np.concatenate(indices)
-                reordered_cell_ix.extend(
-                    indices.tolist()
-                )                
+                reordered_cell_ix.extend(indices.tolist())
             else:
                 linkage = sklearn_linkage(X, n_cores=1, method=method)
                 leave_ix = leaves_list(linkage)
-                reordered_cell_ix.extend(
-                    tmp.obs.index[leave_ix].tolist()
-                )
+                reordered_cell_ix.extend(tmp.obs.index[leave_ix].tolist())
         else:
-            reordered_cell_ix.extend(
-                tmp.obs.index.tolist()
-            )
+            reordered_cell_ix.extend(tmp.obs.index.tolist())
     return adata[reordered_cell_ix]
 
 
@@ -204,7 +210,9 @@ def chromosome_heatmap_summary(
 
     """
     if groupby == "cnv_leiden" and "cnv_leiden" not in adata.obs.columns:
-        raise ValueError("'cnv_leiden' is not in `adata.obs`. Did you run `tl.leiden()`?")
+        raise ValueError(
+            "'cnv_leiden' is not in `adata.obs`. Did you run `tl.leiden()`?"
+        )
 
     # TODO this dirty hack repeats each row 10 times, since scanpy
     # heatmap cannot really handle it if there's just one observation
@@ -215,14 +223,19 @@ def chromosome_heatmap_summary(
     tmp_obs[groupby] = np.hstack([np.repeat(x, 10) for x in groups])
 
     def _get_group_mean(group):
-        group_mean = np.mean(adata.obsm[f"X_{use_rep}"][adata.obs[groupby] == group, :], axis=0)
+        group_mean = np.mean(
+            adata[adata.obs[groupby] == group].obsm[f"X_{use_rep}"],
+            axis=0,  # hallow
+        )
         if len(group_mean.shape) == 1:
             # derived from an array instead of sparse matrix -> 1 dim instead of 2
             group_mean = group_mean[np.newaxis, :]
         return group_mean
 
     tmp_adata = sc.AnnData(
-        X=np.vstack([np.repeat(_get_group_mean(group), 10, axis=0) for group in groups]),
+        X=np.vstack(
+            [np.repeat(_get_group_mean(group), 10, axis=0) for group in groups]
+        ),
         obs=tmp_obs,
     )
 
@@ -230,7 +243,9 @@ def chromosome_heatmap_summary(
     if f"{groupby}_colors" in adata.uns:
         tmp_adata.uns[f"{groupby}_colors"] = adata.uns[f"{groupby}_colors"]
 
-    chr_pos_dict = dict(sorted(adata.uns[use_rep]["chr_pos"].items(), key=lambda x: x[1]))
+    chr_pos_dict = dict(
+        sorted(adata.uns[use_rep]["chr_pos"].items(), key=lambda x: x[1])
+    )
     chr_pos = list(chr_pos_dict.values())
 
     # center color map at 0
@@ -253,7 +268,9 @@ def chromosome_heatmap_summary(
         **kwargs,
     )
 
-    return_ax_dic["heatmap_ax"].vlines(chr_pos[1:], lw=0.6, ymin=-1, ymax=tmp_adata.shape[0])
+    return_ax_dic["heatmap_ax"].vlines(
+        chr_pos[1:], lw=0.6, ymin=-1, ymax=tmp_adata.shape[0]
+    )
 
     savefig_or_show("heatmap", show=show, save=save)
     show = sc.settings.autoshow if show is None else show
