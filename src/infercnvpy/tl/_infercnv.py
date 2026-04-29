@@ -11,6 +11,7 @@ from scanpy import logging
 from tqdm.auto import tqdm
 from tqdm.contrib.concurrent import process_map
 from .._util import _ensure_array
+import more_itertools
 
 
 def infercnv(
@@ -236,7 +237,7 @@ def _running_mean_by_chromosome(
             genes, window_size=window_size, step=step, mode=conv_mode
         )
         assert len(convolved_gene_names) == x_conv.shape[1], (
-            f"{len(convolved_gene_names)} vs {x_conv.shape[1]}"
+            f"Mismatch in convolved X vs convolved genelist: {len(convolved_gene_names)} vs {x_conv.shape[1]}"
         )
         # DataFrame containing all the genes that go into a specific position
         convolved_df = pd.DataFrame({"genes": convolved_gene_names, "chromosome": chr})
@@ -362,18 +363,21 @@ def _gene_list_convolve(gene_list, window_size, step, mode):
     emulate what happens with the convolution on th expression, just pretending to convovle the gene_list
     i.e. we group together the genes that get convolved at each position
     """
-    ggg = {}
-
     # TODO window_size-1 still needed?
     len_threshold = (
         0 if mode == "same" else window_size - 1
     )  # towards the end, the gene list will get shorter due to lack of overlap
     # convolving with "same", the gene list will gradually get shorter until 0. for mode==valid, the last convole will still have len==windowlength
+    if len(gene_list) < window_size:
+        return pd.Series({0: gene_list})
+    else:
+        ggg = {}
+        for i, genes in enumerate(
+            more_itertools.windowed(gene_list, n=window_size, step=step)
+        ):
+            # windowed pads with None, remove those
+            genes = [_ for _ in genes if _ is not None]
+            if len(genes) > len_threshold:
+                ggg[i] = genes
 
-    for i in range(len(gene_list)):
-        start = i * step
-        stop = start + window_size
-        x = gene_list[start:stop]
-        if len(x) > len_threshold:
-            ggg[i] = x
-    return pd.Series(ggg)
+        return pd.Series(ggg)

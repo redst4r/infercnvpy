@@ -32,7 +32,8 @@ dependencies = [
     'pyreadr',
     'scipy>=1.7.0', # for leaves_list()
     'scikit-learn>=1.0.0', # pairwise_distances()
-    'fastcluster'
+    'fastcluster',
+    "more_itertools"
 ]
 
 [project.optional-dependencies]
